@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ポモドーロタイマー & 勉強記録</title>
+<!-- PWA -->
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#221210">
+<link rel="icon" href="./icon-192.png">
+<!-- iOS ホーム画面アプリ -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ポモドーロ">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<style>
+  :root {
+    --work: #e8544b;
+    --break: #2fa27a;
+    --bg-work: #221210;
+    --bg-break: #0f221c;
+    --card: rgba(255,255,255,.05);
+    --line: rgba(255,255,255,.1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Hiragino Sans", "Segoe UI", sans-serif;
+    background: var(--bg-work);
+    color: #fff;
+    min-height: 100vh;
+    transition: background .6s ease;
+    -webkit-user-select: none; user-select: none;
+    padding: 28px 16px 60px;
+  }
+  body.break { background: var(--bg-break); }
+  .wrap { max-width: 440px; margin: 0 auto; }
+  .accent { color: var(--work); transition: color .6s; }
+  body.break .accent { color: var(--break); }
+
+  /* ---- timer ---- */
+  .timer { text-align: center; }
+  .mode { font-size: 14px; letter-spacing: 3px; opacity: .7; margin-bottom: 6px; height: 18px; }
+  .ring-wrap { position: relative; width: 240px; height: 240px; margin: 8px auto; }
+  svg.ring { transform: rotate(-90deg); }
+  .ring-bg { stroke: rgba(255,255,255,.08); }
+  .ring-fg { stroke: var(--work); stroke-linecap: round; transition: stroke-dashoffset .3s linear, stroke .6s; }
+  body.break .ring-fg { stroke: var(--break); }
+  .time { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .time .clock { font-size: 56px; font-weight: 300; font-variant-numeric: tabular-nums; }
+  .time .count { font-size: 12px; opacity: .55; margin-top: 4px; }
+  .dots { margin-top: 8px; height: 12px; }
+  .dots span { display:inline-block; width:8px; height:8px; border-radius:50%; margin:0 3px; background:rgba(255,255,255,.18); }
+  .dots span.fill { background: var(--work); }
+  body.break .dots span.fill { background: var(--break); }
+
+  .subject-row { margin: 8px 0 14px; display: flex; gap: 8px; justify-content: center; align-items: center; }
+  .subject-row input {
+    background: rgba(255,255,255,.08); border: 1px solid var(--line);
+    border-radius: 10px; color: #fff; padding: 9px 12px; font-size: 14px;
+    font-family: inherit; width: 220px; text-align: center;
+  }
+  .subject-row input:focus { outline: 1px solid rgba(255,255,255,.35); }
+
+  .controls { display: flex; gap: 10px; justify-content: center; margin-top: 4px; }
+  button {
+    font-family: inherit; border: none; border-radius: 13px; cursor: pointer;
+    color: #fff; font-size: 15px; padding: 13px 0;
+    transition: transform .1s, opacity .2s;
+  }
+  button:active { transform: scale(.95); }
+  button:hover { opacity: .9; }
+  .btn-main { flex: 2; background: var(--work); font-weight: 600; }
+  body.break .btn-main { background: var(--break); }
+  .btn-sub { flex: 1; background: rgba(255,255,255,.12); }
+  .pip-btn { margin-top: 10px; width: 100%; background: rgba(255,255,255,.09); font-size: 13px; padding: 11px 0; }
+
+  .settings { margin-top: 18px; display: flex; flex-wrap: wrap; justify-content: center; gap: 14px 16px; font-size: 12px; }
+  .settings label { display: flex; flex-direction: column; gap: 5px; opacity: .8; align-items: center; }
+  .settings input[type=number] {
+    width: 58px; text-align: center; background: rgba(255,255,255,.1);
+    border: 1px solid var(--line); border-radius: 8px; color: #fff; padding: 6px 0; font-size: 14px; font-family: inherit;
+  }
+  .toggle-row { display:flex; align-items:center; gap:8px; margin-top:14px; justify-content:center; font-size:13px; opacity:.85; }
+  .toggle-row input { width:16px; height:16px; accent-color: var(--work); }
+
+  /* ---- goal ---- */
+  .goal { margin-top: 26px; background: var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
+  .goal-head { display:flex; justify-content:space-between; align-items:center; font-size:13px; margin-bottom:9px; }
+  .goal-head .g-edit { display:flex; align-items:center; gap:5px; opacity:.7; }
+  .goal-head input { width:44px; text-align:center; background:rgba(255,255,255,.1); border:1px solid var(--line); border-radius:6px; color:#fff; padding:3px 0; font-size:13px; font-family:inherit; }
+  .bar-bg { height:10px; border-radius:6px; background:rgba(255,255,255,.1); overflow:hidden; }
+  .bar-fill { height:100%; width:0; background:var(--work); border-radius:6px; transition:width .4s; }
+  body.break .bar-fill { background:var(--break); }
+  .goal-done { color:#ffd25a; font-weight:600; }
+
+  /* ---- tasks ---- */
+  .tasks { margin-top: 24px; }
+  .sec-title { font-size:13px; opacity:.6; margin-bottom:10px; letter-spacing:1px; }
+  .task-add { display:flex; gap:8px; margin-bottom:12px; }
+  .task-add input.t-name { flex:1; background:rgba(255,255,255,.08); border:1px solid var(--line); border-radius:10px; color:#fff; padding:9px 12px; font-size:14px; font-family:inherit; }
+  .task-add input.t-est { width:50px; text-align:center; background:rgba(255,255,255,.08); border:1px solid var(--line); border-radius:10px; color:#fff; padding:9px 0; font-size:14px; font-family:inherit; }
+  .task-add button { background: var(--work); width:44px; font-size:20px; padding:0; }
+  body.break .task-add button { background: var(--break); }
+  .task { display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid var(--line); font-size:14px; }
+  .task.active { background:rgba(255,255,255,.06); border-radius:8px; padding-left:8px; padding-right:8px; }
+  .task .radio { width:16px; height:16px; border-radius:50%; border:2px solid rgba(255,255,255,.4); flex-shrink:0; cursor:pointer; }
+  .task.active .radio { border-color:var(--work); background:var(--work); }
+  body.break .task.active .radio { border-color:var(--break); background:var(--break); }
+  .task.done .t-txt { text-decoration:line-through; opacity:.4; }
+  .task .t-txt { flex:1; cursor:pointer; }
+  .task .t-pomo { font-size:12px; opacity:.6; font-variant-numeric:tabular-nums; }
+  .task .t-del { background:none; opacity:.4; padding:2px 6px; font-size:14px; }
+  .task .t-check { width:18px; height:18px; accent-color:var(--work); }
+  .est-finish { font-size:12px; opacity:.6; margin-top:10px; text-align:right; }
+
+  /* ---- dashboard ---- */
+  .dash { margin-top: 30px; }
+  .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 8px; text-align: center; }
+  .stat .num { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .lbl { font-size: 11px; opacity: .55; margin-top: 3px; }
+  .tabs { display: flex; gap: 6px; margin: 22px 0 14px; }
+  .tab { flex: 1; background: rgba(255,255,255,.06); border: 1px solid transparent; border-radius: 10px; padding: 9px 0; font-size: 13px; text-align: center; cursor:pointer; }
+  .tab.on { background: rgba(255,255,255,.16); border-color: var(--line); }
+  .panel { display: none; }
+  .panel.on { display: block; }
+  .cal { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 6px; }
+  .cal-col { display: flex; flex-direction: column; gap: 3px; }
+  .cell { width: 13px; height: 13px; border-radius: 3px; background: rgba(255,255,255,.06); }
+  .cal-legend { display: flex; align-items: center; gap: 6px; font-size: 11px; opacity: .5; margin-top: 8px; justify-content: flex-end; }
+  .cal-legend .cell { width: 11px; height: 11px; }
+  .list { max-height: 320px; overflow-y: auto; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 11px 4px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .row .d { opacity: .85; }
+  .row .sub { font-size: 11px; opacity: .45; margin-top: 2px; }
+  .row .v { text-align: right; font-variant-numeric: tabular-nums; }
+  .row .v b { font-size: 15px; }
+  .empty { opacity: .4; text-align: center; padding: 24px 0; font-size: 13px; }
+  .bars { display: flex; align-items: flex-end; gap: 6px; height: 160px; padding-top: 10px; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; height: 100%; justify-content: flex-end; }
+  .bar { width: 100%; max-width: 26px; background: var(--work); border-radius: 5px 5px 0 0; transition: height .3s; min-height: 2px; }
+  body.break .bar { background: var(--break); }
+  .bar-lbl { font-size: 10px; opacity: .5; }
+  .bar-val { font-size: 10px; opacity: .7; height: 12px; }
+  .foot { margin-top: 22px; display: flex; gap: 10px; }
+  .foot button { flex: 1; background: rgba(255,255,255,.1); font-size: 13px; padding: 11px 0; }
+  .danger { color: #ff9a92; }
+  .hint { margin-top: 16px; font-size: 11px; opacity: .38; line-height: 1.6; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Timer -->
+  <div class="timer">
+    <div class="mode" id="modeLabel">FOCUS</div>
+    <div class="ring-wrap">
+      <svg class="ring" width="240" height="240" viewBox="0 0 240 240">
+        <circle class="ring-bg" cx="120" cy="120" r="110" fill="none" stroke-width="11"/>
+        <circle class="ring-fg" id="ring" cx="120" cy="120" r="110" fill="none" stroke-width="11"/>
+      </svg>
+      <div class="time">
+        <div class="clock" id="clock">25:00</div>
+        <div class="count" id="count">🍅 今日 0 セット</div>
+      </div>
+    </div>
+    <div class="dots" id="dots"></div>
+
+    <div class="subject-row">
+      <input type="text" id="subject" placeholder="科目・内容（例：数学）" maxlength="24">
+    </div>
+
+    <div class="controls">
+      <button class="btn-main" id="startBtn">スタート</button>
+      <button class="btn-sub" id="resetBtn">リセット</button>
+      <button class="btn-sub" id="skipBtn">スキップ</button>
+    </div>
+    <button class="pip-btn" id="pipBtn">⇱ 小窓（ピクチャーインピクチャー）で表示</button>
+
+    <div class="settings">
+      <label>集中(分)<input type="number" id="workMin" value="25" min="1" max="120"></label>
+      <label>短い休憩(分)<input type="number" id="breakMin" value="5" min="1" max="60"></label>
+      <label>長い休憩(分)<input type="number" id="longMin" value="15" min="1" max="60"></label>
+      <label>長休憩まで(回)<input type="number" id="longEvery" value="4" min="2" max="8"></label>
+    </div>
+    <div class="toggle-row">
+      <input type="checkbox" id="autoStart" checked>
+      <label for="autoStart" style="opacity:1">休憩・集中を自動で開始する</label>
+    </div>
+  </div>
+
+  <!-- Daily goal -->
+  <div class="goal">
+    <div class="goal-head">
+      <span>今日の目標</span>
+      <span class="g-edit">目標 <input type="number" id="goalInput" value="8" min="1" max="30"> セット</span>
+    </div>
+    <div class="bar-bg"><div class="bar-fill" id="goalBar"></div></div>
+    <div id="goalText" style="font-size:12px;opacity:.6;margin-top:8px"></div>
+  </div>
+
+  <!-- Tasks -->
+  <div class="tasks">
+    <div class="sec-title">今日のタスク</div>
+    <div class="task-add">
+      <input type="text" class="t-name" id="taskName" placeholder="やること（例：数学 問題集 p.30〜）" maxlength="40">
+      <input type="number" class="t-est" id="taskEst" value="1" min="1" max="20" title="見込みポモドーロ数">
+      <button id="taskAdd" title="追加">＋</button>
+    </div>
+    <div id="taskList"></div>
+    <div class="est-finish" id="estFinish"></div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="dash">
+    <div class="stats">
+      <div class="stat"><div class="num" id="stToday">0<span style="font-size:13px">分</span></div><div class="lbl">今日の集中</div></div>
+      <div class="stat"><div class="num" id="stSets">0</div><div class="lbl">今日のセット</div></div>
+      <div class="stat"><div class="num accent" id="stStreak">0<span style="font-size:13px">日</span></div><div class="lbl">連続記録 🔥</div></div>
+    </div>
+    <div class="tabs">
+      <div class="tab on" data-p="cal">カレンダー</div>
+      <div class="tab" data-p="list">リスト</div>
+      <div class="tab" data-p="bar">グラフ</div>
+    </div>
+    <div class="panel on" id="p-cal">
+      <div class="cal" id="cal"></div>
+      <div class="cal-legend">少 <span class="cell" style="background:rgba(255,255,255,.06)"></span>
+        <span class="cell" data-lv="1"></span><span class="cell" data-lv="2"></span>
+        <span class="cell" data-lv="3"></span><span class="cell" data-lv="4"></span> 多</div>
+    </div>
+    <div class="panel" id="p-list"><div class="list" id="list"></div></div>
+    <div class="panel" id="p-bar">
+      <div class="bars" id="bars"></div>
+      <div style="text-align:center;font-size:11px;opacity:.45;margin-top:8px">直近14日の集中時間（分）</div>
+    </div>
+    <div class="foot">
+      <button id="exportBtn">CSVで書き出し</button>
+      <button id="clearBtn" class="danger">記録を全消去</button>
+    </div>
+    <div class="hint">記録はこのブラウザに自動保存されます。スペースキーで開始/停止。<br>小窓はChrome / Edgeで利用できます。</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const LS_LOG='pomo_log_v1', LS_SET='pomo_settings_v2', LS_TASK='pomo_tasks_v1';
+
+  // ---------- storage helpers ----------
+  const load=(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k)) ?? d; }catch(e){ return d; } };
+  const save=(k,v)=>localStorage.setItem(k, JSON.stringify(v));
+  let log=load(LS_LOG,{}), tasks=load(LS_TASK,[]);
+
+  const todayKey=d=>{ d=d||new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+
+  function addRecord(minutes, subject){
+    if(minutes<=0) return;
+    const k=todayKey();
+    if(!log[k]) log[k]={minutes:0,sets:0,subjects:{}};
+    log[k].minutes+=minutes; log[k].sets+=1;
+    const s=(subject||'').trim()||'未分類';
+    log[k].subjects[s]=(log[k].subjects[s]||0)+minutes;
+    save(LS_LOG,log);
+  }
+
+  // ---------- element refs ----------
+  const $=id=>document.getElementById(id);
+  const workInput=$('workMin'), breakInput=$('breakMin'), longInput=$('longMin'),
+        longEveryInput=$('longEvery'), autoStartEl=$('autoStart'),
+        subjectEl=$('subject'), goalInput=$('goalInput');
+
+  // restore settings
+  (function(){
+    const s=load(LS_SET,null);
+    if(s){ if(s.work)workInput.value=s.work; if(s.brk)breakInput.value=s.brk;
+      if(s.long)longInput.value=s.long; if(s.every)longEveryInput.value=s.every;
+      if(typeof s.auto==='boolean')autoStartEl.checked=s.auto;
+      if(s.goal)goalInput.value=s.goal; if(s.subject)subjectEl.value=s.subject; }
+  })();
+  function saveSettings(){ save(LS_SET,{ work:workInput.value, brk:breakInput.value,
+    long:longInput.value, every:longEveryInput.value, auto:autoStartEl.checked,
+    goal:goalInput.value, subject:subjectEl.value }); }
+
+  // ---------- timer core ----------
+  const R=110, CIRC=2*Math.PI*R;
+  const ring=$('ring'); ring.style.strokeDasharray=CIRC; ring.style.strokeDashoffset=0;
+  const clockEl=$('clock'), countEl=$('count'), modeLabel=$('modeLabel'), dotsEl=$('dots'),
+        startBtn=$('startBtn');
+
+  let mode='work';           // 'work' | 'short' | 'long'
+  let running=false, total=25*60, remaining=25*60, tickId=null, cycle=0; // cycle = completed work sessions in current round
+
+  function durFor(m){
+    let v,cap;
+    if(m==='work'){v=+workInput.value;cap=120;} else if(m==='long'){v=+longInput.value;cap=60;} else {v=+breakInput.value;cap=60;}
+    return Math.max(1,Math.min(cap,v||1))*60;
+  }
+  const todaySets=()=>{ const r=log[todayKey()]; return r?r.sets:0; };
+  const isBreak=()=> mode!=='work';
+
+  function fmt(sec){ return String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0'); }
+
+  function renderDots(){
+    const every=Math.max(2,+longEveryInput.value||4);
+    let h='';
+    for(let i=0;i<every;i++) h+=`<span class="${i<cycle?'fill':''}"></span>`;
+    dotsEl.innerHTML=h;
+  }
+
+  function render(){
+    clockEl.textContent=fmt(remaining);
+    countEl.textContent='🍅 今日 '+todaySets()+' セット';
+    modeLabel.textContent = mode==='work'?'FOCUS':(mode==='long'?'LONG BREAK':'BREAK');
+    document.body.classList.toggle('break', isBreak());
+    ring.style.strokeDashoffset = CIRC*(1-(total?remaining/total:0));
+    document.title = fmt(remaining)+' · '+(mode==='work'?'集中':'休憩');
+    renderDots();
+    updatePip();
+  }
+
+  function tick(){ remaining--; if(remaining<=0){ remaining=0; render(); finishPhase(); return; } render(); }
+  function start(){ if(running)return; running=true; startBtn.textContent='一時停止'; tickId=setInterval(tick,1000); initAudio(); updatePip(); }
+  function pause(){ running=false; startBtn.textContent='スタート'; clearInterval(tickId); updatePip(); }
+  function toggle(){ running?pause():start(); }
+  function loadPhase(m,auto){ mode=m; total=durFor(m); remaining=total; pause(); render(); if(auto) start(); }
+
+  function activeTask(){ return tasks.find(t=>t.active && !t.done); }
+
+  function finishPhase(){
+    const elapsedMin=Math.round((total-remaining)/60);
+    pause(); beep();
+    if(mode==='work'){
+      const at=activeTask();
+      addRecord(elapsedMin, at? at.name : subjectEl.value);
+      if(at){ at.done_pomos=(at.done_pomos||0)+1; if(at.done_pomos>=at.est){ at.done=true; at.active=false; } save(LS_TASK,tasks); renderTasks(); }
+      cycle++;
+      const every=Math.max(2,+longEveryInput.value||4);
+      const next = cycle>=every ? 'long':'short';
+      if(next==='long') cycle=0;
+      notify(next==='long'?'よく頑張った！長めに休憩しよう 🌿':'集中おつかれさま！休憩しよう ☕️');
+      renderDash();
+      loadPhase(next, autoStartEl.checked);
+    } else {
+      notify('休憩おわり！集中いこう 🔥');
+      loadPhase('work', autoStartEl.checked);
+    }
+  }
+  function reset(){ cycle=0; loadPhase('work',false); }
+  function skip(){
+    if(mode==='work'){ const at=activeTask(); addRecord(Math.round((total-remaining)/60), at?at.name:subjectEl.value); }
+    beep(); finishPhaseManualSkip();
+  }
+  function finishPhaseManualSkip(){
+    // move to next phase without double-counting (record already added in skip for work)
+    pause();
+    if(mode==='work'){
+      cycle++; const every=Math.max(2,+longEveryInput.value||4);
+      const next=cycle>=every?'long':'short'; if(next==='long')cycle=0;
+      renderDash(); loadPhase(next,false);
+    } else { loadPhase('work',false); }
+  }
+
+  // ---------- audio ----------
+  let ac=null;
+  function initAudio(){ if(!ac){ try{ ac=new(window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(ac&&ac.state==='suspended')ac.resume(); }
+  function beep(){ if(!ac)return; const now=ac.currentTime;
+    for(let i=0;i<3;i++){ const o=ac.createOscillator(),g=ac.createGain(); o.type='sine'; o.frequency.value=880;
+      const t=now+i*.28; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.4,t+.02);
+      g.gain.exponentialRampToValueAtTime(.001,t+.22); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+.24); } }
+  function notify(msg){ if(!('Notification'in window))return; if(Notification.permission==='granted') new Notification('ポモドーロタイマー',{body:msg}); }
+
+  // ---------- Picture-in-Picture ----------
+  let pipWin=null, pipClock=null, pipMode=null, pipBtnInner=null;
+  async function openPip(){
+    if(!('documentPictureInPicture' in window)){
+      alert('この機能はお使いのブラウザでは利用できません。\nChrome または Edge の最新版でお試しください。');
+      return;
+    }
+    if(pipWin){ pipWin.close(); return; }
+    pipWin=await documentPictureInPicture.requestWindow({width:260,height:170});
+    const st=pipWin.document.createElement('style');
+    st.textContent=`
+      body{margin:0;font-family:-apple-system,"Hiragino Sans",sans-serif;background:${isBreak()?'#0f221c':'#221210'};
+        color:#fff;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;-webkit-user-select:none;user-select:none;}
+      #m{font-size:12px;letter-spacing:2px;opacity:.6}
+      #c{font-size:52px;font-weight:300;font-variant-numeric:tabular-nums}
+      #b{margin-top:4px;border:none;border-radius:10px;color:#fff;font-size:14px;padding:9px 22px;cursor:pointer;
+        background:${isBreak()?'#2fa27a':'#e8544b'};font-family:inherit}`;
+    pipWin.document.head.appendChild(st);
+    pipWin.document.body.innerHTML='<div id="m"></div><div id="c"></div><button id="b"></button>';
+    pipClock=pipWin.document.getElementById('c');
+    pipMode=pipWin.document.getElementById('m');
+    pipBtnInner=pipWin.document.getElementById('b');
+    pipBtnInner.addEventListener('click',()=>{ initAudio(); toggle(); });
+    pipWin.addEventListener('pagehide',()=>{ pipWin=null; pipClock=null; pipMode=null; pipBtnInner=null; });
+    updatePip();
+  }
+  function updatePip(){
+    if(!pipWin||!pipClock)return;
+    pipClock.textContent=fmt(remaining);
+    pipMode.textContent = mode==='work'?'FOCUS':(mode==='long'?'LONG BREAK':'BREAK');
+    pipBtnInner.textContent = running?'一時停止':'スタート';
+    const c=isBreak()?'#2fa27a':'#e8544b';
+    pipWin.document.body.style.background=isBreak()?'#0f221c':'#221210';
+    pipBtnInner.style.background=c;
+  }
+
+  // ---------- daily goal ----------
+  function renderGoal(){
+    const goal=Math.max(1,+goalInput.value||8);
+    const done=todaySets();
+    const pct=Math.min(100, done/goal*100);
+    $('goalBar').style.width=pct+'%';
+    const gt=$('goalText');
+    if(done>=goal){ gt.innerHTML=`<span class="goal-done">🎉 目標達成！ ${done}/${goal} セット</span>`; }
+    else { gt.textContent=`${done} / ${goal} セット（あと ${goal-done}）`; }
+  }
+
+  // ---------- tasks ----------
+  const taskName=$('taskName'), taskEst=$('taskEst'), taskListEl=$('taskList'), estFinishEl=$('estFinish');
+  function addTask(){
+    const name=taskName.value.trim(); if(!name)return;
+    const est=Math.max(1,Math.min(20,+taskEst.value||1));
+    tasks.push({id:Date.now(),name,est,done_pomos:0,done:false,active:tasks.length===0});
+    taskName.value=''; taskEst.value=1; save(LS_TASK,tasks); renderTasks();
+  }
+  function setActive(id){ tasks.forEach(t=>t.active=(t.id===id && !t.done)); save(LS_TASK,tasks); renderTasks(); }
+  function toggleDone(id){ const t=tasks.find(x=>x.id===id); if(t){ t.done=!t.done; if(t.done)t.active=false; save(LS_TASK,tasks); renderTasks(); } }
+  function delTask(id){ tasks=tasks.filter(t=>t.id!==id); save(LS_TASK,tasks); renderTasks(); }
+  function renderTasks(){
+    taskListEl.innerHTML='';
+    if(!tasks.length){ taskListEl.innerHTML='<div class="empty">タスクを追加すると、集中がタスクに紐づいて記録されます。</div>'; estFinishEl.textContent=''; return; }
+    tasks.forEach(t=>{
+      const el=document.createElement('div');
+      el.className='task'+(t.active?' active':'')+(t.done?' done':'');
+      el.innerHTML=`<div class="radio" title="このタスクに集中"></div>
+        <input type="checkbox" class="t-check" ${t.done?'checked':''} title="完了">
+        <div class="t-txt">${escapeHtml(t.name)}</div>
+        <div class="t-pomo">🍅 ${t.done_pomos||0}/${t.est}</div>
+        <button class="t-del" title="削除">✕</button>`;
+      el.querySelector('.radio').addEventListener('click',()=>setActive(t.id));
+      el.querySelector('.t-txt').addEventListener('click',()=>setActive(t.id));
+      el.querySelector('.t-check').addEventListener('change',()=>toggleDone(t.id));
+      el.querySelector('.t-del').addEventListener('click',()=>delTask(t.id));
+      taskListEl.appendChild(el);
+    });
+    // estimated finish time
+    const remainPomos=tasks.filter(t=>!t.done).reduce((s,t)=>s+Math.max(0,t.est-(t.done_pomos||0)),0);
+    if(remainPomos>0){
+      const w=+workInput.value||25, b=+breakInput.value||5;
+      const mins=remainPomos*w + (remainPomos-1)*b;
+      const end=new Date(Date.now()+mins*60000);
+      estFinishEl.textContent=`残り ${remainPomos} ポモドーロ ・ 終了予測 ${String(end.getHours()).padStart(2,'0')}:${String(end.getMinutes()).padStart(2,'0')}`;
+    } else estFinishEl.textContent='';
+  }
+  function escapeHtml(s){ return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // ---------- dashboard ----------
+  const stToday=$('stToday'), stSets=$('stSets'), stStreak=$('stStreak'),
+        calEl=$('cal'), listEl=$('list'), barsEl=$('bars');
+  function heatColor(min){
+    if(min<=0)return 'rgba(255,255,255,.06)';
+    const base=isBreak()?[47,162,122]:[232,84,75];
+    let a; if(min<15)a=.3; else if(min<45)a=.5; else if(min<90)a=.7; else a=1;
+    return `rgba(${base[0]},${base[1]},${base[2]},${a})`;
+  }
+  document.querySelectorAll('.cal-legend .cell[data-lv]').forEach(c=>{ c.style.background=heatColor([0,10,30,60,120][+c.dataset.lv]); });
+  function calcStreak(){
+    let s=0, d=new Date();
+    if(!(log[todayKey(d)]&&log[todayKey(d)].minutes>0)) d.setDate(d.getDate()-1);
+    while(true){ const r=log[todayKey(d)]; if(r&&r.minutes>0){ s++; d.setDate(d.getDate()-1);} else break; }
+    return s;
+  }
+  function renderStats(){
+    const t=log[todayKey()]||{minutes:0,sets:0};
+    stToday.innerHTML=t.minutes+'<span style="font-size:13px">分</span>';
+    stSets.textContent=t.sets;
+    stStreak.innerHTML=calcStreak()+'<span style="font-size:13px">日</span>';
+  }
+  function renderCal(){
+    calEl.innerHTML=''; const weeks=18; const today=new Date(); today.setHours(0,0,0,0);
+    const start=new Date(today); start.setDate(start.getDate()-(weeks*7-1)); start.setDate(start.getDate()-start.getDay());
+    let cur=new Date(start);
+    while(cur<=today){
+      const col=document.createElement('div'); col.className='cal-col';
+      for(let i=0;i<7;i++){
+        const cell=document.createElement('div'); cell.className='cell';
+        if(cur<=today){ const r=log[todayKey(cur)]; const m=r?r.minutes:0; cell.style.background=heatColor(m);
+          cell.title=todayKey(cur)+(m?`  ${m}分 / ${r.sets}セット`:'  記録なし'); }
+        else cell.style.visibility='hidden';
+        col.appendChild(cell); cur.setDate(cur.getDate()+1);
+      }
+      calEl.appendChild(col);
+    }
+    calEl.scrollLeft=calEl.scrollWidth;
+  }
+  function renderList(){
+    const keys=Object.keys(log).filter(k=>log[k].minutes>0).sort().reverse();
+    if(!keys.length){ listEl.innerHTML='<div class="empty">まだ記録がありません。1セット集中すると、ここに残ります。</div>'; return; }
+    listEl.innerHTML='';
+    keys.forEach(k=>{ const r=log[k];
+      const subs=Object.entries(r.subjects||{}).sort((a,b)=>b[1]-a[1]).map(([s,m])=>`${escapeHtml(s)} ${m}分`).join(' / ');
+      const wd=['日','月','火','水','木','金','土'][new Date(k).getDay()];
+      const row=document.createElement('div'); row.className='row';
+      row.innerHTML=`<div><div class="d">${k}（${wd}）</div><div class="sub">${subs}</div></div>`+
+                    `<div class="v"><b>${r.minutes}</b>分<br><span style="font-size:11px;opacity:.6">🍅${r.sets}</span></div>`;
+      listEl.appendChild(row);
+    });
+  }
+  function renderBars(){
+    barsEl.innerHTML=''; const days=[]; const d=new Date(); d.setHours(0,0,0,0);
+    for(let i=13;i>=0;i--){ const dd=new Date(d); dd.setDate(dd.getDate()-i); days.push(dd); }
+    const vals=days.map(dd=>{ const r=log[todayKey(dd)]; return r?r.minutes:0; });
+    const max=Math.max(30,...vals);
+    days.forEach((dd,i)=>{ const col=document.createElement('div'); col.className='bar-col'; const v=vals[i];
+      col.innerHTML=`<div class="bar-val">${v||''}</div><div class="bar" style="height:${v/max*100}%"></div><div class="bar-lbl">${dd.getMonth()+1}/${dd.getDate()}</div>`;
+      barsEl.appendChild(col); });
+  }
+  function renderDash(){ renderStats(); renderCal(); renderList(); renderBars(); renderGoal(); }
+
+  // ---------- tabs ----------
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
+    t.classList.add('on'); $('p-'+t.dataset.p).classList.add('on');
+  }));
+
+  // ---------- export / clear ----------
+  $('exportBtn').addEventListener('click',()=>{
+    const keys=Object.keys(log).filter(k=>log[k].minutes>0).sort();
+    let csv='date,minutes,sets,subjects\n';
+    keys.forEach(k=>{ const r=log[k]; const subs=Object.entries(r.subjects||{}).map(([s,m])=>`${s}:${m}`).join(' ');
+      csv+=`${k},${r.minutes},${r.sets},"${subs}"\n`; });
+    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+    const a=document.createElement('a'); a.href=url; a.download='study_log.csv'; a.click(); URL.revokeObjectURL(url);
+  });
+  $('clearBtn').addEventListener('click',()=>{ if(confirm('すべての勉強記録を削除します。よろしいですか？（タスクは残ります）')){ log={}; save(LS_LOG,log); renderDash(); } });
+
+  // ---------- events ----------
+  startBtn.addEventListener('click',()=>{ initAudio(); toggle(); });
+  $('resetBtn').addEventListener('click',reset);
+  $('skipBtn').addEventListener('click',()=>{ initAudio(); skip(); });
+  $('pipBtn').addEventListener('click',openPip);
+  $('taskAdd').addEventListener('click',addTask);
+  taskName.addEventListener('keydown',e=>{ if(e.key==='Enter') addTask(); });
+  [workInput,breakInput,longInput,longEveryInput].forEach(inp=>inp.addEventListener('change',()=>{ saveSettings(); renderDots(); if(!running) loadPhase(mode,false); renderTasks(); }));
+  autoStartEl.addEventListener('change',saveSettings);
+  goalInput.addEventListener('change',()=>{ saveSettings(); renderGoal(); });
+  subjectEl.addEventListener('change',saveSettings);
+  document.addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT')return; if(e.code==='Space'){ e.preventDefault(); initAudio(); toggle(); } });
+  if('Notification'in window && Notification.permission==='default') Notification.requestPermission();
+
+  // ---------- init ----------
+  loadPhase('work',false);
+  renderTasks(); renderDash();
+})();
+
+// Service Worker 登録（オフライン対応。file:// で開いた時は無視される）
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
