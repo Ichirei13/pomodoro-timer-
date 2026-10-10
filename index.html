@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>ポモドーロタイマー & 勉強記録</title>
+<title>ポモドーロタイマー &amp; 勉強記録</title>
 <!-- PWA -->
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#221210" id="themeColor">
@@ -411,8 +411,9 @@
   .dlg-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
   .dlg-head h2 { font-size: 18px; font-weight: 700; }
   .dlg-note { font-size: 13px; line-height: 1.7; color: var(--text-3); margin: 4px 0 12px; text-wrap: pretty; }
-  .set-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; border-bottom: 1px solid var(--line); }
-  .set-row:last-of-type { border-bottom: 0; }
+  .set-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; }
+  .set-row + .set-row { border-top: 1px solid var(--line); }
+  .set-row .btn-ghost { min-height: 40px; flex: none; }
   .set-lbl { font-size: 15px; font-weight: 600; }
   .set-lbl small { display: block; margin-top: 1px; font-size: 12px; font-weight: 400; color: var(--text-3); }
   .set-ctl { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
@@ -478,10 +479,10 @@
 <div class="app">
 
   <header class="topbar">
-    <div class="brand">
+    <h1 class="brand">
       <span class="brand-mark" aria-hidden="true">🍅</span>
       <span>ポモドーロ<small>勉強記録</small></span>
-    </div>
+    </h1>
     <button class="icon-btn" id="settingsBtn" type="button" aria-haspopup="dialog" aria-label="設定を開く" title="設定">
       <svg class="ic"><use href="#i-sliders"/></svg>
     </button>
@@ -604,7 +605,7 @@
             <i class="cell" data-lv="0"></i><i class="cell" data-lv="1"></i><i class="cell" data-lv="2"></i><i class="cell" data-lv="3"></i><i class="cell" data-lv="4"></i>
             <span>多</span></div>
         </div>
-        <div class="panel" id="p-list" role="tabpanel" aria-labelledby="tab-list"><div class="list" id="list"></div></div>
+        <div class="panel" id="p-list" role="tabpanel" aria-labelledby="tab-list"><section class="list" id="list" tabindex="0" aria-label="日ごとの記録（スクロールできます）"></section></div>
         <div class="panel" id="p-bar" role="tabpanel" aria-labelledby="tab-bar">
           <div class="chart">
             <div class="y-axis" id="yAxis" aria-hidden="true"></div>
@@ -621,7 +622,7 @@
     </div>
   </main>
 
-  <p class="hint"><span>記録はこのブラウザに自動保存されます。</span><span><kbd>Space</kbd> キーで開始/一時停止</span><span>小窓はChrome / Edgeで利用できます。</span></p>
+  <footer class="hint"><span>記録はこのブラウザに自動保存されます。</span><span><kbd>Space</kbd> キーで開始/一時停止</span><span>小窓はChrome / Edgeで利用できます。</span></footer>
 </div>
 
 <!-- Settings -->
@@ -631,7 +632,7 @@
       <h2 id="settings-h">設定</h2>
       <button class="icon-btn" type="submit" value="close" aria-label="閉じる"><svg class="ic"><use href="#i-x"/></svg></button>
     </div>
-    <p class="dlg-note">動作中の変更は、次の区切りから反映されます。</p>
+    <p class="dlg-note">動作中は、次の区切りから反映されます。</p>
     <div class="set-row">
       <div class="set-lbl">集中<small>1〜120分</small></div>
       <div class="set-ctl">
@@ -664,10 +665,14 @@
           <button type="button" data-step="1" aria-label="回数を増やす"><svg class="ic"><use href="#i-plus"/></svg></button></div>回
       </div>
     </div>
-    <label class="set-row" for="autoStart">
+    <label class="set-row">
       <span class="set-lbl">自動で開始する<small>休憩・集中を自動でスタート</small></span>
       <input type="checkbox" class="switch" id="autoStart" role="switch" checked>
     </label>
+    <div class="set-row" id="notifyRow" hidden>
+      <div class="set-lbl">通知<small id="notifyState"></small></div>
+      <button class="btn btn-ghost" type="button" id="notifyBtn" hidden>許可する</button>
+    </div>
     <div class="dlg-actions">
       <button class="btn btn-main" type="submit" value="close" autofocus>完了</button>
     </div>
@@ -690,18 +695,22 @@
 
 <script>
 (function(){
-  const LS_LOG='pomo_log_v1', LS_SET='pomo_settings_v2', LS_TASK='pomo_tasks_v1';
+  const LS_LOG='pomo_log_v1', LS_SET='pomo_settings_v2', LS_TASK='pomo_tasks_v1', LS_TIMER='pomo_timer_v1';
 
   // ---------- storage helpers ----------
   const load=(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k)) ?? d; }catch(e){ return d; } };
-  const save=(k,v)=>localStorage.setItem(k, JSON.stringify(v));
+  let saveWarned=false;
+  const save=(k,v)=>{   // 容量超過・プライベートモード等で書けなくても、アプリは止めずに1度だけ知らせる
+    try{ localStorage.setItem(k, JSON.stringify(v)); return true; }
+    catch(e){ if(!saveWarned){ saveWarned=true; setTimeout(()=>toast('記録を保存できませんでした（保存領域がいっぱい、またはプライベートモードの可能性があります）'),0); } return false; }
+  };
   let log=load(LS_LOG,{}), tasks=load(LS_TASK,[]);
 
   const todayKey=d=>{ d=d||new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
 
-  function addRecord(minutes, subject){
+  function addRecord(minutes, subject, when){   // when: 記録する日（省略時は今日）。放置後に遅れて検知した場合は本来の終了日に記録する
     if(minutes<=0) return;
-    const k=todayKey();
+    const k=todayKey(when);
     if(!log[k]) log[k]={minutes:0,sets:0,subjects:{}};
     log[k].minutes+=minutes; log[k].sets+=1;
     if(!log[k].subjects) log[k].subjects={};      // 旧形式（subjects なし）の記録にも追記できるように
@@ -717,13 +726,14 @@
         subjectEl=$('subject'), goalInput=$('goalInput');
 
   // restore settings
-  (function(){
-    const s=load(LS_SET,null);
-    if(s){ if(s.work)workInput.value=s.work; if(s.brk)breakInput.value=s.brk;
-      if(s.long)longInput.value=s.long; if(s.every)longEveryInput.value=s.every;
-      if(typeof s.auto==='boolean')autoStartEl.checked=s.auto;
-      if(s.goal)goalInput.value=s.goal; if(s.subject)subjectEl.value=s.subject; }
-  })();
+  function applySettings(s){
+    if(!s) return;
+    if(s.work)workInput.value=s.work; if(s.brk)breakInput.value=s.brk;
+    if(s.long)longInput.value=s.long; if(s.every)longEveryInput.value=s.every;
+    if(typeof s.auto==='boolean')autoStartEl.checked=s.auto;
+    if(s.goal)goalInput.value=s.goal; if(s.subject)subjectEl.value=s.subject;
+  }
+  applySettings(load(LS_SET,null));
   function saveSettings(){ save(LS_SET,{ work:workInput.value, brk:breakInput.value,
     long:longInput.value, every:longEveryInput.value, auto:autoStartEl.checked,
     goal:goalInput.value, subject:subjectEl.value }); }
@@ -749,15 +759,21 @@
   }
 
   // ---------- timer core ----------
+  // 終了時刻方式：動作中は「完了予定の絶対時刻 endAt」から残り秒を毎回計算する。
+  // 1秒ごとの減算ではないので、タブが裏に回って間引かれても、端末がスリープしても、
+  // 復帰した時点で正しい残り時間になる。状態は localStorage にも保存し、再読み込み後も続きから再開できる。
   const ring=$('ring'), knob=$('knob'), ringWrap=$('ringWrap');
   const R=ring.r.baseVal.value, CIRC=2*Math.PI*R;
   ring.style.strokeDasharray=CIRC; ring.style.strokeDashoffset=0;
   const clockEl=$('clock'), countEl=$('count'), modeLabel=$('modeLabel'), dotsEl=$('dots'), cycleCap=$('cycleCap'),
         startBtn=$('startBtn'), startTxt=$('startTxt'), startUse=$('startIc').firstElementChild, themeMeta=$('themeColor');
   const THEME={ work:{bg:'#221210',fill:'#c93c36',accent:'#ff6a5f'}, brk:{bg:'#0f221c',fill:'#1b7f5b',accent:'#3ecf9c'} };
+  const STALE_MS=60*60*1000;   // 終了から 1時間（または1フェーズ分）以上たったタイマーは、記録せずにリセットする
+  const LATE_OK_MS=90*1000;    // 終了の検知がこれ以内の遅れなら、通知音・通知・自動開始を通常どおり行う
 
   let mode='work';           // 'work' | 'short' | 'long'
-  let running=false, total=25*60, remaining=25*60, tickId=null, cycle=0; // cycle = completed work sessions in current round
+  let running=false, total=25*60, remaining=25*60, endAt=0, cycle=0; // cycle = completed work sessions in current round
+  // running 中の正は endAt（ms）。remaining は表示用に、その時点の残り秒を持つ。
 
   function durFor(m){
     let v,cap;
@@ -767,6 +783,7 @@
   const todaySets=()=>{ const r=log[todayKey()]; return r?r.sets:0; };
   const isBreak=()=> mode!=='work';
   const modeName=()=> mode==='work'?'FOCUS':(mode==='long'?'LONG BREAK':'BREAK');
+  const secLeft=()=>Math.max(0,Math.ceil((endAt-Date.now())/1000));
 
   function fmt(sec){ return String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0'); }
 
@@ -800,69 +817,171 @@
     document.title = fmt(remaining)+' · '+(mode==='work'?'集中':'休憩');
     themeMeta.setAttribute('content', isBreak()?THEME.brk.bg:THEME.work.bg);
     renderDots();
+    renderEst();
     updateStartBtn();
     updatePip();
   }
 
-  function tick(){ remaining--; if(remaining<=0){ remaining=0; render(); finishPhase(); return; } render(); }
-  function start(){ if(running)return; running=true; tickId=setInterval(tick,1000); initAudio(); updateStartBtn(); updatePip(); }
-  function pause(){ running=false; clearInterval(tickId); updateStartBtn(); updatePip(); }
+  // ---- ticker：「そろそろ見直す」合図にすぎない（表示や判定は毎回 Date.now() から計算）
+  // 裏タブで間引かれにくい Web Worker から呼び、メインスレッドの setInterval も保険として併用する。
+  let tickId=null, tickWorker=null;
+  function startTicker(){
+    stopTicker();
+    tickId=setInterval(tick,500);
+    try{
+      if(!tickWorker && typeof Worker==='function'){
+        const src='var t=0;onmessage=function(e){clearInterval(t);if(e.data==="on")t=setInterval(function(){postMessage(0)},250)}';
+        tickWorker=new Worker(URL.createObjectURL(new Blob([src],{type:'text/javascript'})));
+        tickWorker.onmessage=function(){ tick(); };
+        tickWorker.onerror=function(){ try{ tickWorker.terminate(); }catch(e){} tickWorker=null; };
+      }
+      if(tickWorker) tickWorker.postMessage('on');
+    }catch(e){ tickWorker=null; }
+  }
+  function stopTicker(){ clearInterval(tickId); tickId=null; if(tickWorker) tickWorker.postMessage('off'); }
+
+  function tick(){
+    if(!running) return;
+    const now=Date.now();
+    if(endAt-now>total*1000+1500){ endAt=now+total*1000; persistTimer(); }   // 端末の時計が巻き戻された場合の保険
+    if(now>=endAt){ remaining=0; render(); finishPhase(); return; }
+    const r=secLeft();
+    if(r!==remaining){ remaining=r; render(); }
+  }
+  function start(anchor){   // anchor: 前のフェーズの本来の終了時刻（自動で続けて始めるとき、ずれを溜めないため）
+    if(running)return;
+    running=true; endAt=(anchor||Date.now())+remaining*1000;
+    startTicker(); initAudio(); persistTimer(); updateStartBtn(); updatePip();
+  }
+  function halt(){ running=false; stopTicker(); }
+  function pause(){ if(running) remaining=secLeft(); halt(); persistTimer(); updateStartBtn(); updatePip(); }
   function toggle(){ running?pause():start(); }
-  function loadPhase(m,auto){
+  function loadPhase(m,auto,anchor){
     const changed=(m!==mode);
-    mode=m; total=durFor(m); remaining=total; pause(); render();
+    halt(); mode=m; total=durFor(m); remaining=total; endAt=0;
+    render();
     if(changed){ ringWrap.classList.remove('flash'); void ringWrap.offsetWidth; ringWrap.classList.add('flash'); }
-    if(auto) start();
+    if(auto) start(anchor); else persistTimer();
+  }
+
+  // ---- 状態の保存・復元（再読み込み／タブの破棄／他のタブとの同期）
+  let persistOK=true;      // 直近の保存が成功したか（失敗中は保存値が古いので、他タブ判定には使わない）
+  function persistTimer(){
+    // rev：毎回かならず値が変わるようにする（同じ内容を書いても他タブに storage イベントが届き、最終状態へ収束させるため）
+    const rev=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+    try{ localStorage.setItem(LS_TIMER, JSON.stringify({ v:1, rev, mode, cycle, total, remaining, running, endAt, savedAt:Date.now() })); persistOK=true; }catch(e){ persistOK=false; }
+  }
+  function applyTimerState(s){
+    if(!s || !['work','short','long'].includes(s.mode)) return false;
+    halt();
+    mode=s.mode; cycle=Math.max(0,Math.floor(+s.cycle)||0);
+    total=Math.max(60,Math.min(7200,Math.floor(+s.total)||durFor(mode)));
+    if(s.running && +s.endAt>0){ running=true; endAt=+s.endAt; remaining=Math.min(total,secLeft()); startTicker(); }
+    else { endAt=0; const r=Math.floor(+s.remaining); remaining=(r>0&&r<=total)?r:total; }
+    render();
+    if(running) tick();      // 保存時点からすでに終了時刻を過ぎていれば、ここで終了処理に進む
+    return true;
+  }
+  function restoreTimer(){
+    const s=load(LS_TIMER,null);
+    if(!s) return false;
+    // 一時停止中の状態は、同じ日のものだけ復元する（日をまたいだ途中経過やサイクルは引き継がない）
+    if(!s.running && todayKey(new Date(+s.savedAt||0))!==todayKey()) return false;
+    return applyTimerState(s);
   }
 
   function activeTask(){ return tasks.find(t=>t.active && !t.done); }
 
-  function announce(msg){ notify(msg); toast(msg); }
+  function announce(msg,fresh){ if(fresh!==false) notify(msg); toast(msg); }
 
   function finishPhase(){
-    const elapsedMin=Math.round((total-remaining)/60);
-    pause(); beep();
-    if(mode==='work'){
-      const goal=Math.max(1,+goalInput.value||8), before=todaySets();
+    // 他のタブが同じタイマーを先に処理していたら、その状態に合わせるだけにする（二重記録の防止）
+    const saved=load(LS_TIMER,null);
+    if(persistOK && saved && (!saved.running || +saved.endAt!==endAt)){ applyTimerState(saved); return; }
+    const ended=endAt, now=Date.now(), late=Math.max(0,now-ended), prev=mode, len=total;
+    halt(); remaining=0; persistTimer();                      // 先に「処理済み」を書き込み、他タブの二重処理を防ぐ
+    if(late>Math.max(STALE_MS,len*1000)){                     // 長時間の放置（スリープ・アプリ終了など）：記録せずにリセット
+      cycle=0; toast('前回のタイマーは時間が空いたため、記録せずにリセットしました'); loadPhase('work',false); return;
+    }
+    const fresh=late<=LATE_OK_MS;                             // 遅れが小さいときだけ通知音・通知を出す
+    if(fresh) beep();
+    const auto=autoStartEl.checked;
+    if(prev==='work'){
+      const goal=Math.max(1,+goalInput.value||8), sameDay=todayKey(new Date(ended))===todayKey(), before=todaySets();
       const at=activeTask();
-      addRecord(elapsedMin, at? at.name : subjectEl.value);
+      addRecord(Math.round(len/60), at? at.name : subjectEl.value, new Date(ended));
       if(at){ at.done_pomos=(at.done_pomos||0)+1; if(at.done_pomos>=at.est){ at.done=true; at.active=false; } save(LS_TASK,tasks); renderTasks(); }
       cycle++;
       const every=Math.max(2,+longEveryInput.value||4);
       const next = cycle>=every ? 'long':'short';
       if(next==='long') cycle=0;
-      announce(before<goal && todaySets()>=goal ? '🎉 今日の目標を達成しました！おつかれさま！'
-        : next==='long'?'よく頑張った！長めに休憩しよう 🌿':'集中おつかれさま！休憩しよう ☕️');
+      const brkOver = auto && now>=ended+durFor(next)*1000;   // 席を外している間に、休憩まで終わっていた
+      announce(sameDay && before<goal && todaySets()>=goal ? '🎉 今日の目標を達成しました！おつかれさま！'
+        : brkOver ? '集中おつかれさま！休憩はもう終わっています。次の集中を始めましょう 🔥'
+        : next==='long'?'よく頑張った！長めに休憩しよう 🌿':'集中おつかれさま！休憩しよう ☕️', fresh);
       renderDash();
-      loadPhase(next, autoStartEl.checked);
+      if(brkOver) loadPhase('work',false);
+      else loadPhase(next, auto, ended);                      // 休憩は本来の終了時刻から数える
     } else {
-      announce('休憩おわり！集中いこう 🔥');
-      loadPhase('work', autoStartEl.checked);
+      announce('休憩おわり！集中いこう 🔥', fresh);
+      loadPhase('work', auto && fresh);                       // 席を外していた（遅れが大きい）ときは、集中を勝手に始めない
     }
   }
   function reset(){ cycle=0; loadPhase('work',false); }
   function skip(){
+    if(running) remaining=secLeft();
     if(mode==='work'){ const at=activeTask(); addRecord(Math.round((total-remaining)/60), at?at.name:subjectEl.value); }
     beep(); finishPhaseManualSkip();
   }
   function finishPhaseManualSkip(){
     // move to next phase without double-counting (record already added in skip for work)
-    pause();
+    halt();
     if(mode==='work'){
       cycle++; const every=Math.max(2,+longEveryInput.value||4);
       const next=cycle>=every?'long':'short'; if(next==='long')cycle=0;
       renderDash(); loadPhase(next,false);
     } else { loadPhase('work',false); }
   }
+  // ユーザー操作（スタート/一時停止）：音の解除と、最初の1回だけ通知の許可を求める
+  function userToggle(){ initAudio(); if(!running) askNotify(); toggle(); }
 
-  // ---------- audio ----------
+  // ---------- audio / notification ----------
   let ac=null;
   function initAudio(){ if(!ac){ try{ ac=new(window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(ac&&ac.state==='suspended')ac.resume(); }
-  function beep(){ if(!ac)return; const now=ac.currentTime;
+  // 再読み込み後でも終了音が鳴るよう、最初の操作で音を解除しておく
+  // （タッチ端末では pointerdown が「操作」と見なされないことがあるため、pointerup / touchend / click でも解除する）
+  ['pointerdown','pointerup','touchend','click','keydown'].forEach(ev=>document.addEventListener(ev,initAudio,{once:true,capture:true,passive:true}));
+  function beep(){ if(!ac)return; if(ac.state==='suspended') ac.resume(); const now=ac.currentTime;
     for(let i=0;i<3;i++){ const o=ac.createOscillator(),g=ac.createGain(); o.type='sine'; o.frequency.value=880;
       const t=now+i*.28; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.4,t+.02);
       g.gain.exponentialRampToValueAtTime(.001,t+.22); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+.24); } }
-  function notify(msg){ if(!('Notification'in window))return; if(Notification.permission==='granted') new Notification('ポモドーロタイマー',{body:msg}); }
+
+  const notifySupported=()=>'Notification' in window;
+  let notifyAsked=false;
+  function askNotify(){      // 起動時ではなく、最初のスタート操作の中で許可を求める（ユーザー操作の中でないと許可画面が出ない/抑止されるため）
+    if(notifyAsked || !notifySupported() || Notification.permission!=='default') return;
+    notifyAsked=true; requestNotify();
+  }
+  function requestNotify(){
+    try{ const p=Notification.requestPermission(); if(p&&p.then) p.then(renderNotifyRow,renderNotifyRow); else renderNotifyRow(); }catch(e){ renderNotifyRow(); }
+  }
+  function notify(msg){
+    if(!notifySupported() || Notification.permission!=='granted') return;
+    const opts={ body:msg, icon:'./icon-192.png', tag:'pomodoro', renotify:true };
+    try{
+      // Android の Chrome などでは new Notification() が使えない（例外になる）ため、Service Worker 経由で表示する
+      if(navigator.serviceWorker && navigator.serviceWorker.controller){
+        navigator.serviceWorker.ready.then(r=>r.showNotification('ポモドーロタイマー',opts)).catch(()=>{});
+      } else new Notification('ポモドーロタイマー',opts);
+    }catch(e){}
+  }
+  function renderNotifyRow(){
+    const row=$('notifyRow'); if(!notifySupported()){ row.hidden=true; return; }
+    const p=Notification.permission; row.hidden=false;
+    $('notifyState').textContent = p==='granted' ? '許可されています'
+      : p==='denied' ? 'ブロック中（ブラウザの設定で変更できます）' : '終了をお知らせします';
+    $('notifyBtn').hidden = p!=='default';
+  }
 
   // ---------- Picture-in-Picture ----------
   const pipBtn=$('pipBtn');
@@ -888,7 +1007,7 @@
     pipClock=pipWin.document.getElementById('c');
     pipMode=pipWin.document.getElementById('m');
     pipBtnInner=pipWin.document.getElementById('b');
-    pipBtnInner.addEventListener('click',()=>{ initAudio(); toggle(); });
+    pipBtnInner.addEventListener('click',userToggle);
     pipWin.addEventListener('pagehide',()=>{ pipWin=null; pipClock=null; pipMode=null; pipBtnInner=null; });
     updatePip();
   }
@@ -951,13 +1070,13 @@
     taskListEl.innerHTML='';
     taskEmptyEl.hidden = tasks.length>0;
     taskSummaryEl.textContent = tasks.length ? tasks.filter(t=>t.done).length+' / '+tasks.length+' 完了' : '';
-    if(!tasks.length){ estFinishEl.textContent=''; updateTarget(); return; }
+    if(!tasks.length){ renderEst(); updateTarget(); return; }
     tasks.forEach(t=>{
       const isActive=!!t.active && !t.done, doneN=t.done_pomos||0;
       let dots=''; for(let i=0;i<Math.max(t.est,doneN);i++) dots+=`<i class="${i<doneN?'f':''}"></i>`;
       const li=document.createElement('li');
       li.className='task'+(isActive?' active':'')+(t.done?' done':'')+(t.id===justAdded?' enter':'');
-      li.innerHTML=`<input type="checkbox" class="t-check" ${t.done?'checked':''} aria-label="完了にする：${escapeHtml(t.name)}">
+      li.innerHTML=`<input type="checkbox" class="t-check" ${t.done?'checked':''} aria-label="完了：${escapeHtml(t.name)}">
         <button type="button" class="t-main" aria-pressed="${isActive}" ${t.done?'':'title="このタスクに集中する（もう一度押すと解除）"'}>
           <span class="t-txt">${escapeHtml(t.name)}</span>
           <span class="t-meta"><span class="t-dots" aria-hidden="true">${dots}</span><span class="t-pomo">🍅 ${doneN}/${t.est}</span></span>
@@ -969,15 +1088,24 @@
       taskListEl.appendChild(li);
     });
     justAdded=null;
-    // estimated finish time
-    const remainPomos=tasks.filter(t=>!t.done).reduce((s,t)=>s+Math.max(0,t.est-(t.done_pomos||0)),0);
-    if(remainPomos>0){
-      const w=+workInput.value||25, b=+breakInput.value||5;
-      const mins=remainPomos*w + (remainPomos-1)*b;
-      const end=new Date(Date.now()+mins*60000);
-      estFinishEl.innerHTML=`<svg class="ic"><use href="#i-clock"/></svg>残り ${remainPomos} ポモドーロ ・ 終了予測 ${String(end.getHours()).padStart(2,'0')}:${String(end.getMinutes()).padStart(2,'0')}`;
-    } else estFinishEl.textContent='';
+    renderEst();
     updateTarget();
+  }
+  // 終了予測：いまのフェーズの残りから先を、休憩（長い休憩を含む）まで順に足して計算する
+  let estHtml='';
+  function renderEst(){
+    const left=tasks.filter(t=>!t.done).reduce((s,t)=>s+Math.max(0,(t.est||0)-(t.done_pomos||0)),0);
+    let html='';
+    if(left>0){
+      const w=durFor('work'), b=durFor('short'), l=durFor('long'), every=Math.max(2,+longEveryInput.value||4);
+      let sec=running?secLeft():remaining, c=cycle, n=left;
+      const gap=()=>{ c++; if(c>=every){ c=0; return l; } return b; };   // 集中を1回終えたあとの休憩
+      if(mode==='work'){ n--; if(n>0) sec+=gap(); }                      // いま進行中の集中を終えるぶん
+      while(n>0){ sec+=w; n--; if(n>0) sec+=gap(); }
+      const end=new Date(Date.now()+sec*1000);
+      html=`<svg class="ic"><use href="#i-clock"/></svg>残り ${left} ポモドーロ ・ 終了予測 ${String(end.getHours()).padStart(2,'0')}:${String(end.getMinutes()).padStart(2,'0')}`;
+    }
+    if(html!==estHtml){ estHtml=html; estFinishEl.innerHTML=html; }
   }
   function escapeHtml(s){ return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -1091,16 +1219,20 @@
     d.addEventListener('click',e=>{ if(e.target===d) d.close(); });   // 背景タップで閉じる
     d.addEventListener('close',()=>document.documentElement.classList.remove('modal-open'));
   });
-  $('settingsBtn').addEventListener('click',()=>openDlg(settingsDlg));
+  $('settingsBtn').addEventListener('click',()=>{ renderNotifyRow(); openDlg(settingsDlg); });
+  $('notifyBtn').addEventListener('click',requestNotify);
 
   // ---------- export / clear ----------
+  const csvCell=v=>'"'+String(v).replace(/"/g,'""')+'"';
   $('exportBtn').addEventListener('click',()=>{
     const keys=Object.keys(log).filter(k=>log[k].minutes>0).sort();
     let csv='date,minutes,sets,subjects\n';
     keys.forEach(k=>{ const r=log[k]; const subs=Object.entries(r.subjects||{}).map(([s,m])=>`${s}:${m}`).join(' ');
-      csv+=`${k},${r.minutes},${r.sets},"${subs}"\n`; });
-    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-    const a=document.createElement('a'); a.href=url; a.download='study_log.csv'; a.click(); URL.revokeObjectURL(url);
+      csv+=`${k},${r.minutes},${r.sets},${csvCell(subs)}\n`; });
+    // 先頭に BOM(UTF-8)を付ける：付けないと Windows の Excel で日本語が文字化けする
+    const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
+    const a=document.createElement('a'); a.href=url; a.download='study_log.csv'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),2000);   // すぐに解放すると、ブラウザによってはダウンロードが失敗する
     toast('CSVを書き出しました');
   });
   function clearLog(){ log={}; save(LS_LOG,log); calSel=null; renderDash(); render(); toast('記録を削除しました'); }
@@ -1111,7 +1243,7 @@
   confirmDlg.addEventListener('close',()=>{ if(confirmDlg.returnValue==='ok') clearLog(); });
 
   // ---------- events ----------
-  startBtn.addEventListener('click',()=>{ initAudio(); toggle(); });
+  startBtn.addEventListener('click',userToggle);
   $('resetBtn').addEventListener('click',reset);
   $('skipBtn').addEventListener('click',()=>{ initAudio(); skip(); });
   pipBtn.addEventListener('click',openPip);
@@ -1122,13 +1254,28 @@
   goalInput.addEventListener('change',()=>{ saveSettings(); renderGoal(); });
   subjectEl.addEventListener('change',saveSettings);
   const typing=t=>/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)||!!document.querySelector('dialog[open]');
-  document.addEventListener('keydown',e=>{ if(e.code!=='Space'||e.repeat||typing(e.target))return; e.preventDefault(); initAudio(); toggle(); });
+  document.addEventListener('keydown',e=>{ if(e.code!=='Space'||e.repeat||typing(e.target))return; e.preventDefault(); userToggle(); });
   document.addEventListener('keyup',e=>{ if(e.code==='Space'&&!typing(e.target)) e.preventDefault(); });   // フォーカス中ボタンの二重発火を防ぐ
-  if('Notification'in window && Notification.permission==='default') Notification.requestPermission();
+
+  // ---------- 復帰・日付またぎ・他のタブとの同期 ----------
+  let curDay=todayKey();
+  function checkDay(){ const k=todayKey(); if(k!==curDay){ curDay=k; calSel=null; renderDash(); render(); } else renderEst(); }
+  function resync(){ if(running) tick(); checkDay(); }
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) resync(); });
+  window.addEventListener('pageshow',resync);
+  window.addEventListener('focus',resync);
+  setInterval(checkDay,60000);
+  window.addEventListener('storage',e=>{                // 別のタブでの変更を取り込む（上書きして記録を失わないように）
+    if(e.storageArea!==localStorage) return;
+    if(e.key===LS_TIMER && e.newValue){ try{ applyTimerState(JSON.parse(e.newValue)); }catch(_){} }
+    else if(e.key===LS_LOG){ log=load(LS_LOG,{}); renderDash(); render(); }
+    else if(e.key===LS_TASK){ tasks=load(LS_TASK,[]); renderTasks(); }
+    else if(e.key===LS_SET && e.newValue){ try{ applySettings(JSON.parse(e.newValue)); }catch(_){} renderDots(); renderGoal(); renderEst(); }   // 値の反映のみ（change は発火させず、保存の往復を避ける）
+  });
 
   // ---------- init ----------
-  loadPhase('work',false);
-  renderTasks(); renderDash();
+  renderTasks(); renderDash(); renderNotifyRow();
+  if(!restoreTimer()) loadPhase('work',false);
 })();
 
 // Service Worker 登録（オフライン対応。file:// で開いた時は無視される）

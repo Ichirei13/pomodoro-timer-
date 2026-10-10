@@ -1,5 +1,5 @@
 // Service Worker — オフライン対応（アプリシェルをキャッシュ）
-const CACHE = 'pomodoro-v2';
+const CACHE = 'pomodoro-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -38,6 +38,17 @@ self.addEventListener('fetch', (e) => {
         })
         .catch(() => cached);
       return cached || net;
+    })
+  );
+});
+
+// 通知をタップ/クリックしたら、開いているアプリを前面に出す（無ければ開く）
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) { if ('focus' in c) return c.focus(); }
+      return self.clients.openWindow('./');
     })
   );
 });
